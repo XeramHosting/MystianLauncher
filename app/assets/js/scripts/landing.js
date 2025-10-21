@@ -746,6 +746,7 @@ function slide_(up){
 const rootDocumentEl = document.documentElement
 let mfLbResizeBound = false
 let mfLbFocusReturn = null
+let mfLbScrollState = null
 
 document.getElementById('newsButton').onclick = () => {
     const landingContainerEl = document.getElementById('landingContainer')
@@ -757,6 +758,13 @@ document.getElementById('newsButton').onclick = () => {
         if(landingContainerEl){ landingContainerEl.classList.remove('news-open') }
         document.body.classList.remove('news-open')
         document.documentElement.classList.remove('news-open')
+        if(mfLbScrollState){
+            if(mfLbScrollState.body != null){ document.body.style.overflow = mfLbScrollState.body }
+            else { document.body.style.removeProperty('overflow') }
+            if(mfLbScrollState.html != null){ document.documentElement.style.overflow = mfLbScrollState.html }
+            else { document.documentElement.style.removeProperty('overflow') }
+            mfLbScrollState = null
+        }
         rootDocumentEl.style.removeProperty('--mf-lb-top-gap')
         rootDocumentEl.style.removeProperty('--mf-lb-footer-height')
         rootDocumentEl.style.removeProperty('--mf-lb-viewport-height')
@@ -797,6 +805,12 @@ document.getElementById('newsButton').onclick = () => {
         if(landingContainerEl){ landingContainerEl.classList.add('news-open') }
         document.body.classList.add('news-open')
         document.documentElement.classList.add('news-open')
+        mfLbScrollState = {
+            body: document.body.style.overflow || null,
+            html: document.documentElement.style.overflow || null
+        }
+        document.body.style.overflow = 'hidden'
+        document.documentElement.style.overflow = 'hidden'
         // Forward wheel events on the overlay background to the inner scroller for unified scroll
         if(!window._mfLbWheelBound){
             const overlay = document.getElementById('newsContent')
@@ -1161,12 +1175,12 @@ async function initNews(){
             // Ensure double-arrow buttons exist
             if(nav && !document.getElementById('newsNavigateFirst')){
                 const first = document.createElement('button'); first.id = 'newsNavigateFirst'; first.title='First page'; first.setAttribute('aria-label','First page')
-                first.innerHTML = '<svg id="newsNavigationFirstSVG" viewBox="0 0 24.87 13.97"><polyline class="arrowLine" points="0.71 13.26 12.56 1.41 24.16 13.02" transform="translate(-4,0)"/><polyline class="arrowLine" points="0.71 13.26 12.56 1.41 24.16 13.02" transform="translate(2,0)"/></svg>'
+                first.innerHTML = '<svg id="newsNavigationFirstSVG" viewBox="0 0 24 20"><polyline class="arrowLine" points="2 18 12 8 22 18"/><polyline class="arrowLine" points="2 12 12 2 22 12"/></svg>'
                 nav.insertBefore(first, nav.firstChild)
             }
             if(nav && !document.getElementById('newsNavigateLast')){
                 const last = document.createElement('button'); last.id = 'newsNavigateLast'; last.title='Last page'; last.setAttribute('aria-label','Last page')
-                last.innerHTML = '<svg id="newsNavigationLastSVG" viewBox="0 0 24.87 13.97"><polyline class="arrowLine" points="0.71 13.26 12.56 1.41 24.16 13.02" transform="translate(-2,0)"/><polyline class="arrowLine" points="0.71 13.26 12.56 1.41 24.16 13.02" transform="translate(4,0)"/></svg>'
+                last.innerHTML = '<svg id="newsNavigationLastSVG" viewBox="0 0 24 20"><polyline class="arrowLine" points="2 18 12 8 22 18"/><polyline class="arrowLine" points="2 12 12 2 22 12"/></svg>'
                 nav.appendChild(last)
             }
             const topPrev = document.getElementById('newsNavigateLeft'); const topNext = document.getElementById('newsNavigateRight')
