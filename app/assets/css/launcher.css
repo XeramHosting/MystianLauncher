@@ -2489,7 +2489,7 @@ input:checked + .toggleSwitchSlider:before {
     transition: top 2s ease;
     top: 0px;
     height: 100%;
-    width: 33% !important;
+    width: 30% !important;
     display: inline-flex;
     justify-content: center;
 }
@@ -2505,7 +2505,7 @@ input:checked + .toggleSwitchSlider:before {
     transition: top 2s ease;
     top: 0px;
     height: 100%;
-    width: 34% !important;
+    width: 40% !important;
     display: inline-flex;
     justify-content: center;
 }
@@ -2520,7 +2520,7 @@ input:checked + .toggleSwitchSlider:before {
     transition: top 2s ease;
     top: 0px;
     height: 100%;
-    width: 33%;
+    width: 30%;
     display: inline-flex;
 }
 
