@@ -743,11 +743,29 @@ function slide_(up){
 }
 
 // Bind news button.
+const rootDocumentEl = document.documentElement
+let mfLbResizeBound = false
+let mfLbFocusReturn = null
+
 document.getElementById('newsButton').onclick = () => {
-    // Toggle tabbing.
+    const landingContainerEl = document.getElementById('landingContainer')
+    const opening = !newsActive
+
     if(newsActive){
         $('#landingContainer *').removeAttr('tabindex')
         $('#newsContainer *').attr('tabindex', '-1')
+        if(landingContainerEl){ landingContainerEl.classList.remove('news-open') }
+        document.body.classList.remove('news-open')
+        rootDocumentEl.style.removeProperty('--mf-lb-top-gap')
+        rootDocumentEl.style.removeProperty('--mf-lb-footer-height')
+        rootDocumentEl.style.removeProperty('--mf-lb-viewport-height')
+        if(mfLbResizeBound){ window.removeEventListener('resize', computeLeaderboardSticky); mfLbResizeBound = false }
+        if(mfLbFocusReturn && typeof mfLbFocusReturn.focus === 'function'){
+            try { mfLbFocusReturn.focus({ preventScroll: true }) } catch(_e) { /* noop */ }
+        } else {
+            const btn = document.getElementById('newsButton'); if(btn){ btn.focus({ preventScroll: true }) }
+        }
+        mfLbFocusReturn = null
     } else {
         $('#landingContainer *').attr('tabindex', '-1')
         $('#newsContainer, #newsContainer *, #lower, #lower #center *').removeAttr('tabindex')
@@ -761,8 +779,35 @@ document.getElementById('newsButton').onclick = () => {
             window._mfLbBootstrapped = true
             try { initNews() } catch(e) { loggerLanding.warn('initNews failed to start', e) }
         }
+        ensureLeaderboardScaffold()
+        computeLeaderboardSticky()
+        if(!mfLbResizeBound){ window.addEventListener('resize', computeLeaderboardSticky); mfLbResizeBound = true }
+        mfLbFocusReturn = document.activeElement
     }
-    slide_(!newsActive)
+
+    slide_(opening)
+
+    if(opening){
+        if(landingContainerEl){ landingContainerEl.classList.add('news-open') }
+        document.body.classList.add('news-open')
+    }
+
+    if(opening){
+        const searchFocus = document.getElementById('mfLbSearch')
+        if(searchFocus){
+            setTimeout(() => {
+                try {
+                    searchFocus.focus({ preventScroll: true })
+                } catch(_e) {
+                    searchFocus.focus()
+                }
+                if(typeof searchFocus.select === 'function'){
+                    searchFocus.select()
+                }
+            }, 120)
+        }
+    }
+
     newsActive = !newsActive
 }
 
@@ -772,16 +817,79 @@ let newsArr = null
 // News load animation listener.
 let newsLoadingListener = null
 
+// Leaderboard layout helpers.
+
+
+function computeLeaderboardSticky(){
+    const header = document.getElementById('mfLbHeader')
+    if(!header){ return }
+    const frame = document.getElementById('frameBar')
+    const frameHeight = frame ? frame.getBoundingClientRect().height : 0
+    const headerHeight = header.getBoundingClientRect().height
+    const topGap = Math.max(headerHeight + 24, Math.round(frameHeight) + 36)
+    rootDocumentEl.style.setProperty('--mf-lb-top-gap', `${topGap}px`)
+    const available = Math.max(320, window.innerHeight - topGap - 120)
+    rootDocumentEl.style.setProperty('--mf-lb-viewport-height', `${available}px`)
+}
+
+function ensureLeaderboardScaffold(){
+    if(!newsArticleContentScrollable){ return }
+
+    let header = document.getElementById('mfLbHeader')
+    if(!header){
+        header = document.createElement('div')
+        header.id = 'mfLbHeader'
+        header.innerHTML = `
+            <div class="mf-lb-header__meta">
+                <p class="mf-lb-header__summary" id="mfLbSummary">Loading leaderboards...</p>
+            </div>
+            <div class="mf-lb-header__controls">
+                <div class="mf-lb-header__nav"></div>
+                <div class="mf-lb-header__jump">
+                    <label class="mf-lb-sr" for="mfLbJump">Jump to page</label>
+                    <div class="mf-lb-jump">
+                        <input type="number" min="1" id="mfLbJump" class="mf-lb-input mf-lb-input-narrow" value="${String(window._mfLeaderboardPage)}">
+                        <button id="mfLbGoBtn" class="mf-lb-btn mf-lb-btn--compact" aria-label="Go to page">Go</button>
+                    </div>
+                </div>
+                <div class="mf-lb-header__search">
+                    <label class="mf-lb-sr" for="mfLbSearch">Search player</label>
+                    <div class="mf-lb-search">
+                        <input type="search" id="mfLbSearch" class="mf-lb-input" placeholder="Search player" value="${window._mfLeaderboardSearch || ''}">
+                        <button id="mfLbClearBtn" class="mf-lb-btn mf-lb-btn--icon" title="Clear search" aria-label="Clear search">&times;</button>
+                    </div>
+                </div>
+            </div>
+        `
+        newsArticleContentScrollable.insertBefore(header, newsArticleContentScrollable.firstChild)
+    }
+
+    const controls = header.querySelector('.mf-lb-header__controls')
+    const summary = header.querySelector('#mfLbSummary')
+    if(summary){ summary.setAttribute('aria-live', 'polite'); summary.setAttribute('role', 'status') }
+
+    const navShell = controls.querySelector('.mf-lb-header__nav')
+    const nav = document.getElementById('newsNavigationContainer')
+    if(nav && nav.parentElement !== navShell){
+        nav.classList.add('mf-lb-nav')
+        nav.style.display = ''
+        navShell.appendChild(nav)
+    }
+    computeLeaderboardSticky()
+}
+
 /**
  * Set the news loading animation.
  * 
  * @param {boolean} val True to set loading animation, otherwise false.
  */
 function setNewsLoading(val){
+    if(!nELoadSpan){ return }
     if(val){
         const nLStr = Lang.queryJS('landing.news.checking')
         let dotStr = '..'
         nELoadSpan.innerHTML = nLStr + dotStr
+        const summary = document.getElementById('mfLbSummary'); if(summary){ summary.textContent = 'Loading leaderboards...' }
         newsLoadingListener = setInterval(() => {
             if(dotStr.length >= 3){
                 dotStr = ''
@@ -807,7 +915,7 @@ newsErrorRetry.onclick = () => {
 }
 
 newsArticleContentScrollable.onscroll = (e) => {
-    if(e.target.scrollTop > Number.parseFloat($('.newsArticleSpacerTop').css('height'))){
+    if(e.target.scrollTop > 12){
         newsContent.setAttribute('scrolled', '')
     } else {
         newsContent.removeAttribute('scrolled')
@@ -889,10 +997,18 @@ async function initNews(){
         const rankIdx = headers.findIndex(h => /rank/i.test(h)) >= 0 ? headers.findIndex(h => /rank/i.test(h)) : 0
 
         const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim().replace(/\s+/g, ' ')))
-        const medalFor = (n) => { const i = parseInt(n,10); if(i===1) return '🥇'; if(i===2) return '🥈'; if(i===3) return '🥉'; return n }
+        const medalFor = (value) => {
+            const pos = parseInt(value, 10)
+            if(Number.isNaN(pos)){ return value }
+            if(pos === 1) return '??'
+            if(pos === 2) return '??'
+            if(pos === 3) return '??'
+            return value
+        }
 
-        let html = '<div class="mf-lb-wrap"><table class="mf-lb-table"><thead><tr>'
-        html += headers.map(h => `<th>${h}</th>`).join('')
+        let html = '<div class="mf-lb-wrap" role="region" aria-labelledby="mfLbHeading">'
+        html += '<div class="mf-lb-table-container"><table class="mf-lb-table" aria-describedby="mfLbSummary"><thead><tr>'
+        html += headers.map((h, idx) => `<th scope="col"${idx === 0 ? ' aria-sort="ascending"' : ''}>${h}</th>`).join('')
         html += '</tr></thead><tbody>'
         html += rows.map(cols => {
             const mod = [...cols]
@@ -905,22 +1021,7 @@ async function initNews(){
             }
             return `<tr>${mod.map(c => `<td>${c}</td>`).join('')}</tr>`
         }).join('')
-        html += '</tbody></table>'
-        html += `<div class="mf-lb-footer">
-            <div class="mf-lb-pager">
-                <button class="mf-lb-btn" id="mfLbPrev" aria-label="Previous">&laquo;</button>
-                <span class="mf-lb-page" id="mfLbPage"></span>
-                <button class="mf-lb-btn" id="mfLbNext" aria-label="Next">&raquo;</button>
-            </div>
-            <div class="mf-lb-actions">
-                <input type="search" id="mfLbSearch" class="mf-lb-input" placeholder="Search player" value="${window._mfLeaderboardSearch || ''}">
-                <button id="mfLbClearBtn" class="mf-lb-btn" title="Clear">&times;</button>
-                <input type="number" min="1" id="mfLbJump" class="mf-lb-input mf-lb-input-narrow" value="${String(window._mfLeaderboardPage)}">
-                <button id="mfLbGoBtn" class="mf-lb-btn">Go</button>
-                <button id="mfLbClose" class="mf-lb-btn">Close</button>
-            </div>
-        </div>`
-        html += '</div>'
+        html += '</tbody></table></div></div>'
         return `<div id="newsArticleContentWrapper">${html}</div>`
     }
 
@@ -929,47 +1030,128 @@ async function initNews(){
         if(jumpMax){ const m = parseInt(jumpMax.getAttribute('max')||'0',10); if(!isNaN(m)&&m>0) return m }
         const pag = doc.querySelector('ul.pagination'); if(!pag) return null
         const lastRel = pag.querySelector('a[rel="last"]')
-        if(lastRel && lastRel.href){ try{ const u=new URL(lastRel.href); const n=parseInt(u.searchParams.get('page')||'0',10); if(!isNaN(n)&&n>0) return n }catch(_e){} }
-        let max=1; Array.from(pag.querySelectorAll('a[href]')).forEach(a=>{ try{ const u=new URL(a.href,'https://mystianfields.net'); const n=parseInt(u.searchParams.get('page')||'0',10); if(!isNaN(n)) max=Math.max(max,n) }catch(_e){ const m=a.href&&a.href.match(/[?&]page=(\d+)/); if(m){ const n=parseInt(m[1],10); if(!isNaN(n)) max=Math.max(max,n) } } })
+        if(lastRel && lastRel.href){
+            try{
+                const u=new URL(lastRel.href)
+                const n=parseInt(u.searchParams.get('page')||'0',10)
+                if(!isNaN(n)&&n>0) return n
+            }catch(_e){
+                loggerLanding.debug('Unable to parse last page link', _e)
+            }
+        }
+        let max=1
+        Array.from(pag.querySelectorAll('a[href]')).forEach(a=>{
+            try{
+                const u=new URL(a.href,'https://mystianfields.net')
+                const n=parseInt(u.searchParams.get('page')||'0',10)
+                if(!isNaN(n)) max=Math.max(max,n)
+            }catch(_e){
+                const m=a.href && a.href.match(/[?&]page=(\d+)/)
+                if(m){
+                    const n=parseInt(m[1],10)
+                    if(!isNaN(n)) max=Math.max(max,n)
+                }
+            }
+        })
         return max
     }
 
     const applyNavStatus = () => {
         const total = window._mfLeaderboardTotalPages
         const q = window._mfLeaderboardSearch && window._mfLeaderboardSearch.length > 0 ? ` - ${window._mfLeaderboardSearch}` : ''
-        newsNavigationStatus.innerHTML = total && total > 0 ? `Play Time${q} — Page ${window._mfLeaderboardPage} / ${total}` : `Play Time${q} — Page ${window._mfLeaderboardPage}`
+        const statusText = total && total > 0 ? `Play Time${q} - Page ${window._mfLeaderboardPage} / ${total}` : `Play Time${q} - Page ${window._mfLeaderboardPage}`
+        if(newsNavigationStatus){ newsNavigationStatus.textContent = statusText }
         newsContent.setAttribute('article', window._mfLeaderboardPage - 1)
-        const lbl = document.getElementById('mfLbPage'); if(lbl){ lbl.textContent = total && total > 0 ? `Page ${window._mfLeaderboardPage} / ${total}` : `Page ${window._mfLeaderboardPage}` }
+        const summary = document.getElementById('mfLbSummary'); if(summary){ summary.textContent = statusText }
     }
 
     const loadAndRender = async () => {
         try{
-            const html = await fetchHTML(buildURL(window._mfLeaderboardPage))
+            const summaryDuringLoad = document.getElementById('mfLbSummary'); if(summaryDuringLoad){ summaryDuringLoad.textContent = 'Loading leaderboards...' }
+            const cacheKey = `${window._mfLeaderboardPage}|${window._mfLeaderboardSearch || ''}`
+            const lbCache = window._mfLeaderboardCache || (window._mfLeaderboardCache = new Map())
+            let html
+            if(lbCache.has(cacheKey)){
+                html = lbCache.get(cacheKey)
+            } else {
+                html = await fetchHTML(buildURL(window._mfLeaderboardPage))
+                lbCache.set(cacheKey, html)
+                if(lbCache.size > 40){ const firstKey = lbCache.keys().next().value; if(firstKey != null){ lbCache.delete(firstKey) } }
+            }
+
             const parser = new DOMParser(); const doc = parser.parseFromString(html,'text/html')
             const content = renderTable(doc); const total = parseTotalPages(doc); if(total){ window._mfLeaderboardTotalPages = total }
             if(content == null){ throw new Error('Leaderboard table not found') }
-            newsArticleContentScrollable.innerHTML = content
+
+            ensureLeaderboardScaffold()
+
+            Array.from(newsArticleContentScrollable.querySelectorAll('#newsArticleContentWrapper')).forEach(node => node.remove())
+            Array.from(newsArticleContentScrollable.querySelectorAll('.mf-lb-wrap')).forEach(node => node.remove())
+            const fragment = document.createElement('div'); fragment.innerHTML = content
+            const rendered = fragment.firstElementChild; if(rendered){ newsArticleContentScrollable.appendChild(rendered) }
+
+            newsArticleContentScrollable.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+            newsArticleContentScrollable.scrollTop = 0
+
             applyNavStatus(); setNewsLoading(false)
             const titleContainer = document.getElementById('newsTitleContainer'); const metaContainer = document.getElementById('newsMetaContainer')
             if(titleContainer){ titleContainer.style.display = 'none' } if(metaContainer){ metaContainer.style.display = 'none' }
             const statusCol = document.getElementById('newsStatusContainer'); if(statusCol){ statusCol.style.display = 'none' }
             await $('#newsErrorContainer').fadeOut(250).promise(); await $('#newsContent').fadeIn(250).promise()
-            try { moveNewsButtonToTop() } catch(_e){}
 
-            const prev = document.getElementById('mfLbPrev'); const next = document.getElementById('mfLbNext')
+            const topPrev = document.getElementById('newsNavigateLeft'); const topNext = document.getElementById('newsNavigateRight')
+            const prev = topPrev; const next = topNext
             const searchEl = document.getElementById('mfLbSearch'); const clearEl = document.getElementById('mfLbClearBtn')
-            const jumpEl = document.getElementById('mfLbJump'); const goEl = document.getElementById('mfLbGoBtn'); const closeEl = document.getElementById('mfLbClose')
-            const topPrev = document.getElementById('newsNavigateLeft'); const topNext = document.getElementById('newsNavigateRight'); if(topPrev) topPrev.style.display='none'; if(topNext) topNext.style.display='none'
+            const jumpEl = document.getElementById('mfLbJump'); const goEl = document.getElementById('mfLbGoBtn')
+            if(jumpEl){ jumpEl.value = String(window._mfLeaderboardPage) }
+            if(searchEl){ searchEl.value = window._mfLeaderboardSearch || '' }
             if(prev){ prev.onclick = async () => { window._mfLeaderboardPage = Math.max(1, window._mfLeaderboardPage-1); setNewsLoading(true); await loadAndRender() } }
             if(next){ next.onclick = async () => { const t=window._mfLeaderboardTotalPages; if(t && window._mfLeaderboardPage>=t) return; window._mfLeaderboardPage+=1; setNewsLoading(true); await loadAndRender() } }
-            const totalForBtns = window._mfLeaderboardTotalPages || null; if(prev){ prev.disabled = window._mfLeaderboardPage<=1 }; if(next){ next.disabled = totalForBtns ? (window._mfLeaderboardPage>=totalForBtns) : false }
+            const totalForBtns = window._mfLeaderboardTotalPages || null
+            if(prev){ prev.disabled = window._mfLeaderboardPage <= 1 }
+            if(next){ next.disabled = totalForBtns ? (window._mfLeaderboardPage >= totalForBtns) : false }
             if(jumpEl && totalForBtns){ jumpEl.setAttribute('max', String(totalForBtns)) }
-            if(goEl && jumpEl){ goEl.onclick = async () => { const total = window._mfLeaderboardTotalPages; let target = parseInt(jumpEl.value,10); if(isNaN(target)||target<1) target=1; if(total && target>total) target=total; if(target===window._mfLeaderboardPage) return; window._mfLeaderboardPage=target; setNewsLoading(true); await loadAndRender() } }
-            if(searchEl){ let t; const trigger = async()=>{ const q=searchEl.value.trim(); window._mfLeaderboardSearch=q.length>0?q:null; localStorage.setItem('mfLbSearch', window._mfLeaderboardSearch||''); window._mfLeaderboardPage=1; setNewsLoading(true); await loadAndRender() }; searchEl.addEventListener('input',()=>{clearTimeout(t); t=setTimeout(trigger,350)}); searchEl.addEventListener('keydown',async(e)=>{ if(e.key==='Enter'){ clearTimeout(t); await trigger() }}) }
-            if(clearEl && searchEl){ clearEl.onclick = async ()=>{ searchEl.value=''; window._mfLeaderboardSearch=null; localStorage.setItem('mfLbSearch',''); window._mfLeaderboardPage=1; setNewsLoading(true); await loadAndRender() } }
-            if(jumpEl && goEl){ jumpEl.addEventListener('keydown', async (e)=>{ if(e.key==='Enter'){ e.preventDefault(); goEl.click() } }) }
-            if(closeEl){ closeEl.onclick = () => { const btn=document.getElementById('newsButton'); if(btn){ btn.click() } } }
+            if(goEl && jumpEl){
+                goEl.onclick = async () => {
+                    const total = window._mfLeaderboardTotalPages
+                    let target = parseInt(jumpEl.value,10)
+                    if(isNaN(target)||target<1) target=1
+                    if(total && target>total) target=total
+                    if(target===window._mfLeaderboardPage) return
+                    window._mfLeaderboardPage=target
+                    setNewsLoading(true)
+                    await loadAndRender()
+                }
+                jumpEl.onkeydown = async (e) => { if(e.key==='Enter'){ e.preventDefault(); goEl.click() } }
+            }
+            if(searchEl){
+                let debounce
+                const trigger = async () => {
+                    const q = searchEl.value.trim()
+                    window._mfLeaderboardSearch = q.length>0 ? q : null
+                    localStorage.setItem('mfLbSearch', window._mfLeaderboardSearch || '')
+                    window._mfLeaderboardPage = 1
+                    setNewsLoading(true)
+                    await loadAndRender()
+                }
+                searchEl.oninput = () => { clearTimeout(debounce); debounce = setTimeout(trigger, 350) }
+                searchEl.onkeydown = async (e) => { if(e.key==='Enter'){ clearTimeout(debounce); await trigger() } }
+            }
+            if(clearEl && searchEl){
+                clearEl.onclick = async () => {
+                    searchEl.value = ''
+                    window._mfLeaderboardSearch = null
+                    localStorage.setItem('mfLbSearch','')
+                    window._mfLeaderboardPage = 1
+                    setNewsLoading(true)
+                    await loadAndRender()
+                }
+            }
+            if(topPrev){ topPrev.style.display = '' }
+            if(topNext){ topNext.style.display = '' }
+            computeLeaderboardSticky()
         }catch(e){
+            const summaryDuringError = document.getElementById('mfLbSummary'); if(summaryDuringError){ summaryDuringError.textContent = 'Unable to load leaderboards.' }
             loggerLanding.warn('Failed to load leaderboard page', e); setNewsLoading(false); await $('#newsErrorLoading').fadeOut(250).promise(); await $('#newsErrorFailed').fadeIn(250).promise()
         }
     }
@@ -991,6 +1173,10 @@ document.addEventListener('keydown', (e) => {
         }
         if(e.key === 'Escape'){
             const btn = document.getElementById('newsButton'); if(btn){ btn.click() }
+        }
+        if((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')){
+            e.preventDefault()
+            const searchField = document.getElementById('mfLbSearch'); if(searchField){ try { searchField.focus({ preventScroll: true }); searchField.select() } catch(_e) { searchField.focus(); searchField.select() } }
         }
         // Interferes with scrolling an article using the down arrow.
         // Not sure of a straight forward solution at this point.
@@ -1102,3 +1288,4 @@ async function loadNews(){
 
     return await promise
 }
+

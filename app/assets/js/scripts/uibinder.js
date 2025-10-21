@@ -72,7 +72,7 @@ async function showMainUI(data){
         document.body.style.backgroundImage = `url('assets/images/backgrounds/${document.body.getAttribute('bkid')}.jpg')`
         setInterval(() => {
             document.body.style.backgroundImage = `url('assets/images/backgrounds/${Math.floor(Math.random() * 8)}.jpg')`
-        }, 30000);
+        }, 30000)
         $('#main').show()
 
         const isLoggedIn = Object.keys(ConfigManager.getAuthAccounts()).length > 0
