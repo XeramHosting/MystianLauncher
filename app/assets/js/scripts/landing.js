@@ -26,6 +26,7 @@ const {
     latestOpenJDK,
     extractJdk
 }                             = require('helios-core/java')
+const https                     = require('https')
 
 // Internal Requirements
 const DiscordWrapper          = require('./assets/js/discordwrapper')
@@ -241,6 +242,7 @@ const refreshServerStatus = async (fade = false) => {
 
     let pLabel = Lang.queryJS('landing.serverStatus.server')
     let pVal = Lang.queryJS('landing.serverStatus.offline')
+    let headsHTML = ''
 
     try {
 
@@ -249,21 +251,58 @@ const refreshServerStatus = async (fade = false) => {
         pLabel = Lang.queryJS('landing.serverStatus.players')
         pVal = servStat.players.online + '/' + servStat.players.max
 
+        // Resolve sample players list from common fields.
+        let samples = []
+        if(Array.isArray(servStat?.players?.sample)){
+            samples = servStat.players.sample
+        } else if(Array.isArray(servStat?.players?.list)){
+            samples = servStat.players.list
+        } else if(Array.isArray(servStat?.samplePlayers)){
+            samples = servStat.samplePlayers
+        }
+
+        if(samples && samples.length > 0){
+            headsHTML = samples.map(s => {
+                const name = s?.name || s?.player || s?.username || ''
+                const uuid = (s?.id || s?.uuid || '').replace(/-/g, '')
+                const imgSrc = uuid ? `https://crafatar.com/avatars/${uuid}?size=24&overlay` : (name ? `https://mc-heads.net/avatar/${encodeURIComponent(name)}/24` : '')
+                const title = name || (uuid ? uuid : '')
+                return imgSrc ? `<img class="player_head" src="${imgSrc}" alt="${name}" title="${title}" width="24" height="24"/>` : ''
+            }).join('')
+        }
+
     } catch (err) {
         loggerLanding.warn('Unable to refresh server status, assuming offline.')
         loggerLanding.debug(err)
     }
+
+    const applyToDOM = () => {
+        document.getElementById('landingPlayerLabel').innerHTML = pLabel
+        document.getElementById('player_count').innerHTML = pVal
+        const headsEl = document.getElementById('player_heads')
+        if(headsEl){
+            headsEl.innerHTML = headsHTML
+            if(!window._playerHeadsHoverInit){
+                const wrapper = document.getElementById('server_status_wrapper')
+                const showHeads = () => { if(headsEl && headsEl.innerHTML.trim().length > 0) $(headsEl).stop(true, true).fadeIn(150) }
+                const hideHeads = () => { if(headsEl) $(headsEl).stop(true, true).fadeOut(150) }
+                if(wrapper){
+                    wrapper.addEventListener('mouseenter', showHeads)
+                    wrapper.addEventListener('mouseleave', hideHeads)
+                }
+                window._playerHeadsHoverInit = true
+            }
+        }
+    }
+
     if(fade){
         $('#server_status_wrapper').fadeOut(250, () => {
-            document.getElementById('landingPlayerLabel').innerHTML = pLabel
-            document.getElementById('player_count').innerHTML = pVal
+            applyToDOM()
             $('#server_status_wrapper').fadeIn(500)
         })
     } else {
-        document.getElementById('landingPlayerLabel').innerHTML = pLabel
-        document.getElementById('player_count').innerHTML = pVal
+        applyToDOM()
     }
-    
 }
 
 refreshMojangStatuses()
@@ -718,6 +757,10 @@ document.getElementById('newsButton').onclick = () => {
             ConfigManager.setNewsCacheDismissed(true)
             ConfigManager.save()
         }
+        if(!window._mfLbBootstrapped){
+            window._mfLbBootstrapped = true
+            try { initNews() } catch(e) { loggerLanding.warn('initNews failed to start', e) }
+        }
     }
     slide_(!newsActive)
     newsActive = !newsActive
@@ -809,103 +852,135 @@ async function digestMessage(str) {
 }
 
 /**
- * Initialize News UI. This will load the news and prepare
- * the UI accordingly.
- * 
- * @returns {Promise.<void>} A promise which resolves when the news
- * content has finished loading and transitioning.
+ * Initialize Leaderboards UI by fetching and parsing the table HTML natively.
+ * Renders only the table inside the news panel and wires pagination.
  */
 async function initNews(){
-
     setNewsLoading(true)
 
-    const news = await loadNews()
-
-    newsArr = news?.articles || null
-
-    if(newsArr == null){
-        // News Loading Failed
-        setNewsLoading(false)
-
-        await $('#newsErrorLoading').fadeOut(250).promise()
-        await $('#newsErrorFailed').fadeIn(250).promise()
-
-    } else if(newsArr.length === 0) {
-        // No News Articles
-        setNewsLoading(false)
-
-        ConfigManager.setNewsCache({
-            date: null,
-            content: null,
-            dismissed: false
-        })
-        ConfigManager.save()
-
-        await $('#newsErrorLoading').fadeOut(250).promise()
-        await $('#newsErrorNone').fadeIn(250).promise()
-    } else {
-        // Success
-        setNewsLoading(false)
-
-        const lN = newsArr[0]
-        const cached = ConfigManager.getNewsCache()
-        let newHash = await digestMessage(lN.content)
-        let newDate = new Date(lN.date)
-        let isNew = false
-
-        if(cached.date != null && cached.content != null){
-
-            if(new Date(cached.date) >= newDate){
-
-                // Compare Content
-                if(cached.content !== newHash){
-                    isNew = true
-                    showNewsAlert()
-                } else {
-                    if(!cached.dismissed){
-                        isNew = true
-                        showNewsAlert()
-                    }
-                }
-
-            } else {
-                isNew = true
-                showNewsAlert()
-            }
-
-        } else {
-            isNew = true
-            showNewsAlert()
-        }
-
-        if(isNew){
-            ConfigManager.setNewsCache({
-                date: newDate.getTime(),
-                content: newHash,
-                dismissed: false
-            })
-            ConfigManager.save()
-        }
-
-        const switchHandler = (forward) => {
-            let cArt = parseInt(newsContent.getAttribute('article'))
-            let nxtArt = forward ? (cArt >= newsArr.length-1 ? 0 : cArt + 1) : (cArt <= 0 ? newsArr.length-1 : cArt - 1)
-    
-            displayArticle(newsArr[nxtArt], nxtArt+1)
-        }
-
-        document.getElementById('newsNavigateRight').onclick = () => { switchHandler(true) }
-        document.getElementById('newsNavigateLeft').onclick = () => { switchHandler(false) }
-        await $('#newsErrorContainer').fadeOut(250).promise()
-        displayArticle(newsArr[0], 1)
-        await $('#newsContent').fadeIn(250).promise()
+    if(window._mfLeaderboardPage == null){ window._mfLeaderboardPage = 1 }
+    if(window._mfLeaderboardSearch == null){
+        const saved = localStorage.getItem('mfLbSearch'); if(saved){ window._mfLeaderboardSearch = saved || null }
     }
 
+    const perPage = 25
+    const buildURL = (page) => {
+        const base = `https://mystianfields.net/leaderboards/play-time/?perPage=${perPage}&page=${page}`
+        const q = window._mfLeaderboardSearch && window._mfLeaderboardSearch.length > 0 ? `&search=${encodeURIComponent(window._mfLeaderboardSearch)}` : ''
+        return base + q
+    }
 
+    const fetchHTML = (url) => new Promise((resolve, reject) => {
+        https.get(url, (res) => {
+            if(res.statusCode >= 300 && res.statusCode < 400 && res.headers.location){ return resolve(fetchHTML(res.headers.location)) }
+            let data = ''; res.on('data', c => data += c); res.on('end', () => resolve(data))
+        }).on('error', reject)
+    })
+
+    const renderTable = (doc) => {
+        const table = doc.querySelector('table.table')
+        const thead = table ? table.querySelector('thead') : null
+        const tbody = table ? table.querySelector('tbody#leaderboards') : null
+        if(!tbody){ return null }
+
+        let headers = []
+        headers = thead ? Array.from(thead.querySelectorAll('th')).map(th => th.textContent.trim()) : ['Rank','Username','Value']
+        const usernameIdx = headers.findIndex(h => /username/i.test(h))
+        const rankIdx = headers.findIndex(h => /rank/i.test(h)) >= 0 ? headers.findIndex(h => /rank/i.test(h)) : 0
+
+        const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim().replace(/\s+/g, ' ')))
+        const medalFor = (n) => { const i = parseInt(n,10); if(i===1) return '🥇'; if(i===2) return '🥈'; if(i===3) return '🥉'; return n }
+
+        let html = '<div class="mf-lb-wrap"><table class="mf-lb-table"><thead><tr>'
+        html += headers.map(h => `<th>${h}</th>`).join('')
+        html += '</tr></thead><tbody>'
+        html += rows.map(cols => {
+            const mod = [...cols]
+            if(rankIdx >= 0 && mod[rankIdx] != null){ mod[rankIdx] = medalFor(mod[rankIdx]) }
+            if(usernameIdx >= 0 && mod[usernameIdx] != null){ const u=mod[usernameIdx]; const ava=`https://mc-heads.net/avatar/${encodeURIComponent(u)}/20.png`; mod[usernameIdx]=`<span class="mf-lb-user"><img class="mf-lb-ava" src="${ava}" width="20" height="20" alt="${u}"/>${u}</span>` }
+            for(let i=0;i<mod.length;i++){
+                if(i!==usernameIdx && i!==rankIdx && /date|joined|updated|created|last\s*seen/i.test(headers[i]||'')){
+                    const d=new Date(mod[i]); if(!isNaN(d.getTime())){ mod[i]=d.toLocaleString() }
+                }
+            }
+            return `<tr>${mod.map(c => `<td>${c}</td>`).join('')}</tr>`
+        }).join('')
+        html += '</tbody></table>'
+        html += `<div class="mf-lb-footer">
+            <div class="mf-lb-pager">
+                <button class="mf-lb-btn" id="mfLbPrev" aria-label="Previous">&laquo;</button>
+                <span class="mf-lb-page" id="mfLbPage"></span>
+                <button class="mf-lb-btn" id="mfLbNext" aria-label="Next">&raquo;</button>
+            </div>
+            <div class="mf-lb-actions">
+                <input type="search" id="mfLbSearch" class="mf-lb-input" placeholder="Search player" value="${window._mfLeaderboardSearch || ''}">
+                <button id="mfLbClearBtn" class="mf-lb-btn" title="Clear">&times;</button>
+                <input type="number" min="1" id="mfLbJump" class="mf-lb-input mf-lb-input-narrow" value="${String(window._mfLeaderboardPage)}">
+                <button id="mfLbGoBtn" class="mf-lb-btn">Go</button>
+                <button id="mfLbClose" class="mf-lb-btn">Close</button>
+            </div>
+        </div>`
+        html += '</div>'
+        return `<div id="newsArticleContentWrapper">${html}</div>`
+    }
+
+    const parseTotalPages = (doc) => {
+        const jumpMax = doc.querySelector('form input[name="page"][max]')
+        if(jumpMax){ const m = parseInt(jumpMax.getAttribute('max')||'0',10); if(!isNaN(m)&&m>0) return m }
+        const pag = doc.querySelector('ul.pagination'); if(!pag) return null
+        const lastRel = pag.querySelector('a[rel="last"]')
+        if(lastRel && lastRel.href){ try{ const u=new URL(lastRel.href); const n=parseInt(u.searchParams.get('page')||'0',10); if(!isNaN(n)&&n>0) return n }catch(_e){} }
+        let max=1; Array.from(pag.querySelectorAll('a[href]')).forEach(a=>{ try{ const u=new URL(a.href,'https://mystianfields.net'); const n=parseInt(u.searchParams.get('page')||'0',10); if(!isNaN(n)) max=Math.max(max,n) }catch(_e){ const m=a.href&&a.href.match(/[?&]page=(\d+)/); if(m){ const n=parseInt(m[1],10); if(!isNaN(n)) max=Math.max(max,n) } } })
+        return max
+    }
+
+    const applyNavStatus = () => {
+        const total = window._mfLeaderboardTotalPages
+        const q = window._mfLeaderboardSearch && window._mfLeaderboardSearch.length > 0 ? ` - ${window._mfLeaderboardSearch}` : ''
+        newsNavigationStatus.innerHTML = total && total > 0 ? `Play Time${q} — Page ${window._mfLeaderboardPage} / ${total}` : `Play Time${q} — Page ${window._mfLeaderboardPage}`
+        newsContent.setAttribute('article', window._mfLeaderboardPage - 1)
+        const lbl = document.getElementById('mfLbPage'); if(lbl){ lbl.textContent = total && total > 0 ? `Page ${window._mfLeaderboardPage} / ${total}` : `Page ${window._mfLeaderboardPage}` }
+    }
+
+    const loadAndRender = async () => {
+        try{
+            const html = await fetchHTML(buildURL(window._mfLeaderboardPage))
+            const parser = new DOMParser(); const doc = parser.parseFromString(html,'text/html')
+            const content = renderTable(doc); const total = parseTotalPages(doc); if(total){ window._mfLeaderboardTotalPages = total }
+            if(content == null){ throw new Error('Leaderboard table not found') }
+            newsArticleContentScrollable.innerHTML = content
+            applyNavStatus(); setNewsLoading(false)
+            const titleContainer = document.getElementById('newsTitleContainer'); const metaContainer = document.getElementById('newsMetaContainer')
+            if(titleContainer){ titleContainer.style.display = 'none' } if(metaContainer){ metaContainer.style.display = 'none' }
+            const statusCol = document.getElementById('newsStatusContainer'); if(statusCol){ statusCol.style.display = 'none' }
+            await $('#newsErrorContainer').fadeOut(250).promise(); await $('#newsContent').fadeIn(250).promise()
+            try { moveNewsButtonToTop() } catch(_e){}
+
+            const prev = document.getElementById('mfLbPrev'); const next = document.getElementById('mfLbNext')
+            const searchEl = document.getElementById('mfLbSearch'); const clearEl = document.getElementById('mfLbClearBtn')
+            const jumpEl = document.getElementById('mfLbJump'); const goEl = document.getElementById('mfLbGoBtn'); const closeEl = document.getElementById('mfLbClose')
+            const topPrev = document.getElementById('newsNavigateLeft'); const topNext = document.getElementById('newsNavigateRight'); if(topPrev) topPrev.style.display='none'; if(topNext) topNext.style.display='none'
+            if(prev){ prev.onclick = async () => { window._mfLeaderboardPage = Math.max(1, window._mfLeaderboardPage-1); setNewsLoading(true); await loadAndRender() } }
+            if(next){ next.onclick = async () => { const t=window._mfLeaderboardTotalPages; if(t && window._mfLeaderboardPage>=t) return; window._mfLeaderboardPage+=1; setNewsLoading(true); await loadAndRender() } }
+            const totalForBtns = window._mfLeaderboardTotalPages || null; if(prev){ prev.disabled = window._mfLeaderboardPage<=1 }; if(next){ next.disabled = totalForBtns ? (window._mfLeaderboardPage>=totalForBtns) : false }
+            if(jumpEl && totalForBtns){ jumpEl.setAttribute('max', String(totalForBtns)) }
+            if(goEl && jumpEl){ goEl.onclick = async () => { const total = window._mfLeaderboardTotalPages; let target = parseInt(jumpEl.value,10); if(isNaN(target)||target<1) target=1; if(total && target>total) target=total; if(target===window._mfLeaderboardPage) return; window._mfLeaderboardPage=target; setNewsLoading(true); await loadAndRender() } }
+            if(searchEl){ let t; const trigger = async()=>{ const q=searchEl.value.trim(); window._mfLeaderboardSearch=q.length>0?q:null; localStorage.setItem('mfLbSearch', window._mfLeaderboardSearch||''); window._mfLeaderboardPage=1; setNewsLoading(true); await loadAndRender() }; searchEl.addEventListener('input',()=>{clearTimeout(t); t=setTimeout(trigger,350)}); searchEl.addEventListener('keydown',async(e)=>{ if(e.key==='Enter'){ clearTimeout(t); await trigger() }}) }
+            if(clearEl && searchEl){ clearEl.onclick = async ()=>{ searchEl.value=''; window._mfLeaderboardSearch=null; localStorage.setItem('mfLbSearch',''); window._mfLeaderboardPage=1; setNewsLoading(true); await loadAndRender() } }
+            if(jumpEl && goEl){ jumpEl.addEventListener('keydown', async (e)=>{ if(e.key==='Enter'){ e.preventDefault(); goEl.click() } }) }
+            if(closeEl){ closeEl.onclick = () => { const btn=document.getElementById('newsButton'); if(btn){ btn.click() } } }
+        }catch(e){
+            loggerLanding.warn('Failed to load leaderboard page', e); setNewsLoading(false); await $('#newsErrorLoading').fadeOut(250).promise(); await $('#newsErrorFailed').fadeIn(250).promise()
+        }
+    }
+
+    document.getElementById('newsNavigateRight').onclick = async () => { const total = window._mfLeaderboardTotalPages; if(total && window._mfLeaderboardPage>=total) return; window._mfLeaderboardPage+=1; setNewsLoading(true); await loadAndRender() }
+    document.getElementById('newsNavigateLeft').onclick = async () => { window._mfLeaderboardPage = Math.max(1, window._mfLeaderboardPage-1); setNewsLoading(true); await loadAndRender() }
+
+    await loadAndRender()
 }
 
 /**
- * Add keyboard controls to the news UI. Left and right arrows toggle
  * between articles. If you are on the landing page, the up arrow will
  * open the news UI.
  */
@@ -913,6 +988,9 @@ document.addEventListener('keydown', (e) => {
     if(newsActive){
         if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
             document.getElementById(e.key === 'ArrowRight' ? 'newsNavigateRight' : 'newsNavigateLeft').click()
+        }
+        if(e.key === 'Escape'){
+            const btn = document.getElementById('newsButton'); if(btn){ btn.click() }
         }
         // Interferes with scrolling an article using the down arrow.
         // Not sure of a straight forward solution at this point.

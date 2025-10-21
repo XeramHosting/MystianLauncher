@@ -2489,7 +2489,7 @@ input:checked + .toggleSwitchSlider:before {
     transition: top 2s ease;
     top: 0px;
     height: 100%;
-    width: 33%;
+    width: 33% !important;
     display: inline-flex;
     justify-content: center;
 }
@@ -2505,7 +2505,7 @@ input:checked + .toggleSwitchSlider:before {
     transition: top 2s ease;
     top: 0px;
     height: 100%;
-    width: 34%;
+    width: 34% !important;
     display: inline-flex;
     justify-content: center;
 }
@@ -2566,15 +2566,7 @@ input:checked + .toggleSwitchSlider:before {
 }
 
 /* News article status container (left). */
-#newsStatusContainer {
-    width: calc(30% - 60px);
-    height: calc(100% - 30px);
-    padding: 15px 15px 15px 45px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    position: relative;
-}
+#newsStatusContainer { display: none; }
 
 /* News status content. */
 #newsStatusContent {
@@ -2663,19 +2655,27 @@ input:checked + .toggleSwitchSlider:before {
     color: #c7c7c7;
 }
 
-/* Article content container (right). */
-#newsArticleContainer {
-    width: calc(100% - 25px);
-    height: 100%;
-    margin: 0px 0px 0px 25px;
+/* Article content container (right) and scroll area */
+#newsContainer #newsArticleContainer { 
+    width: 88% !important; 
+    margin: 0 auto !important; 
 }
-
-/* Article content styles. */
-#newsArticleContentScrollable {
+#newsContainer #newsArticleContentWrapper { 
+    width: 100% !important; 
+}
+#newsArticleContent { padding-left: 0; margin-left: 0; }
+#newsContainer #newsArticleContentScrollable {
     font-size: 12px;
     overflow-y: scroll;
     height: 100%;
-    padding: 0px 15px 0px 15px;
+    padding: 0 0 180px 0 !important;
+    margin: 0 !important;
+    scrollbar-width: none; 
+    -ms-overflow-style: none; 
+}
+#newsContainer #newsArticleContentScrollable::-webkit-scrollbar { 
+    width: 0 !important; 
+    height: 0 !important; 
 }
 #newsArticleContentScrollable img,
 #newsArticleContentScrollable iframe {
@@ -2718,11 +2718,11 @@ input:checked + .toggleSwitchSlider:before {
 }
 .bbCodeSpoilerButton:hover,
 .bbCodeSpoilerButton:focus {
-    text-shadow: 0px 0px 20px #ffffff, 0px 0px 20px #ffffff, 0px 0px 20px #ffffff;
+    text-shadow: 0px 0px 20px white;
 }
 .bbCodeSpoilerButton:active {
     color: #c7c7c7;
-    text-shadow: 0px 0px 20px #c7c7c7, 0px 0px 20px #c7c7c7, 0px 0px 20px #c7c7c7;
+    text-shadow: 0px 0px 20px #c7c7c7;
 }
 .bbCodeSpoilerText {
     display: none;
@@ -2858,9 +2858,7 @@ input:checked + .toggleSwitchSlider:before {
     height: 70px;
     width: auto;
     position: relative;
-    border: 2px solid white;
     box-sizing: border-box;
-    border-radius: 50%;
 }
 
 /* Logo container styles. */
@@ -2868,7 +2866,6 @@ input:checked + .toggleSwitchSlider:before {
     position: relative;
     height: 70px;
     width: 70px;
-    border-radius: 50%;
     margin-top: 50px;
 }
 
@@ -3060,17 +3057,29 @@ input:checked + .toggleSwitchSlider:before {
 /* Social media icon shared styles. */
 .mediaSVG {
     fill: #ffffff;
-    height: 12px;
+    height: 20px;
     transition: 0.25s ease;
-    cursor: pointer;
-    height: 12px;
-    width: 25px;
+}
+.mediaURL {
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    text-decoration: none;
+    height: 24px;
+    width: 30px;
+    display: flex;
+    align-items: center;
 }
 .mediaSVG:hover,
 .mediaURL:focus .mediaSVG,
 .mediaSVG:active {
-    height: 20px;
+    height: 30px;
 }
+
+/* Direct IDs for base sizes to win specificity */
+#settingsSVG, #linkSVG, #xSVG, #instagramSVG, #youtubeSVG, #discordSVG { height: 20px !important; width: auto; }
+#internalMedia .mediaSVG { height: 20px !important; }
+#externalMedia .mediaSVG { height: 20px !important; }
 
 /* Social media URL shared styles. */
 .mediaURL {
@@ -3126,7 +3135,7 @@ input:checked + .toggleSwitchSlider:before {
     margin-top: -5px;
     border-width: 5px;
     border-style: solid;
-    border-color: transparent transparent transparent rgba(0, 0, 0, 0.75);
+    border-color: transparent transparent rgba(0, 0, 0, 0.75);
 }
 .mediaButton:hover #settingsTooltip,
 .mediaButton:focus #settingsTooltip,
@@ -3181,7 +3190,7 @@ input:checked + .toggleSwitchSlider:before {
 
 /* Style for a general label on the bottom of the landing view. */
 .bot_label {
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 1px;
     font-weight: bold;
     text-shadow: 0px 0px 0px #bebcbb;
@@ -3209,10 +3218,31 @@ input:checked + .toggleSwitchSlider:before {
 /* Span which displays the player count of the selected server. */
 #player_count {
     color: #949494;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 900;
     text-shadow: 0px 0px 20px #949494;
     margin-left: 10px;
+}
+
+/* Hover tooltip of player heads populated by server status. */
+#player_heads {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    border-radius: 4px;
+    padding: 6px 8px;
+    box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.6);
+    display: none;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+.player_head {
+    border-radius: 3px;
+    margin-right: 4px;
+    image-rendering: pixelated;
+    box-shadow: 0px 0px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* Wrapper container for the mojang status bar. */
@@ -3224,7 +3254,7 @@ input:checked + .toggleSwitchSlider:before {
 
 /* Icon which displays the status of the mojang services. */
 #mojang_status_icon {
-    font-size: 30px;
+    font-size: 34px;
     color: #848484;
     margin-left: 15px;
     font-family: 'sans-serif';
@@ -3329,6 +3359,15 @@ input:checked + .toggleSwitchSlider:before {
     cursor: pointer;
     outline: none;
 }
+
+/* DEBUG: Force show the Leaderboards button and its container for verification. */
+#landingContainer > #lower > #center #content #newsButton {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10;
+}
 #newsButton:hover #newsButtonText,
 #newsButton:focus #newsButtonText {
     text-shadow: 0px 0px 20px #fff, 0px 0px 20px #fff;
@@ -3365,7 +3404,7 @@ input:checked + .toggleSwitchSlider:before {
 
 /* Arrow image which floats above the news button. */
 #newsButtonSVG {
-    height: 11px;
+    height: 13px;
     margin-left: -2px;
     transition: 0.25s ease;
 }
@@ -3376,10 +3415,113 @@ input:checked + .toggleSwitchSlider:before {
     font-weight: 900;
     letter-spacing: 2px;
     text-shadow: 0px 0px 0px #bebcbb;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 30px;
     display: flex;
     transition: 0.25s ease;
+}
+
+/* Leaderboard (news panel) */
+.mf-lb-wrap {
+    display: block;
+    width: 100%;
+    padding: 0;
+}
+
+.mf-lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.mf-lb-table thead th {
+    text-align: left;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.35);
+    border-bottom: 1px solid rgba(126, 126, 126, 0.57);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.mf-lb-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(126, 126, 126, 0.25);
+}
+.mf-lb-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+/* Center rank and last-value columns */
+.mf-lb-table thead th:first-child,
+.mf-lb-table tbody td:first-child,
+.mf-lb-table thead th:last-child,
+.mf-lb-table tbody td:last-child {
+    text-align: center;
+}
+
+.mf-lb-user {
+    display: inline-flex;
+    align-items: center;
+    column-gap: 8px;
+}
+.mf-lb-ava {
+    border-radius: 3px;
+    image-rendering: pixelated;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+.mf-lb-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 0 48px;
+}
+.mf-lb-pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.mf-lb-page {
+    font-size: 11px;
+    color: #cfcfcf;
+}
+
+.mf-lb-controls {
+    display: inline-flex;
+    align-items: center;
+    column-gap: 6px;
+    margin-left: 10px;
+}
+.mf-lb-input {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(126, 126, 126, 0.57);
+    border-radius: 3px;
+    color: white;
+    padding: 4px 6px;
+    font-size: 11px;
+    outline: none;
+}
+.mf-lb-input:focus {
+    box-shadow: 0 0 10px rgba(255,255,255,0.15);
+}
+.mf-lb-input-narrow {
+    width: 60px;
+    text-align: center;
+}
+.mf-lb-btn {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(126, 126, 126, 0.57);
+    border-radius: 3px;
+    color: white;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.mf-lb-btn:hover, .mf-lb-btn:focus {
+    background: rgba(54, 54, 54, 0.25);
+    text-shadow: 0 0 10px white;
 }
 
 /* * *
